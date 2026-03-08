@@ -1,61 +1,91 @@
-from fastapi import APIRouter, HTTPException
+import os
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.db.database import get_db
+from app.db.models import User, Log, Appliance, Schedule
+from app.api.auth import get_current_user
+from app.core.colorado_engine import evaluate_grid_status, get_colorado_time
+from app.core.ai_service import generate_savings_forecast
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
-from app.core.colorado_engine import evaluate_grid_status, get_colorado_time
+from dotenv import load_dotenv
+
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+load_dotenv(dotenv_path=env_path)
 
 router = APIRouter()
 
-# --- MOCK DATABASE ---
-# In a real app, this would be a Supabase client connection
-mock_db_logs = []
+class LogCreate(BaseModel):
+    appliance_id: int
+    executed_time: Optional[datetime] = None
 
-class LogEntry(BaseModel):
-    user_id: str
-    task_name: str
-    power_kw: float
-    timestamp: Optional[str] = None
+class LogResponse(BaseModel):
+    id: int
+    appliance_id: int
+    executed_time: datetime
+    cost: float
 
-@router.post("/logs")
-def create_log(entry: LogEntry):
-    if not entry.timestamp:
-        entry.timestamp = get_colorado_time().isoformat()
+    class Config:
+        from_attributes = True
+
+@router.post("/logs", response_model=LogResponse)
+def create_log(entry: LogCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Execute a task right now and log it historically. Calculates actual cost."""
     
-    # Store in mock DB
-    log_data = entry.model_dump()
-    mock_db_logs.append(log_data)
+    # Ensure they own the appliance
+    appliance = db.query(Appliance).filter(Appliance.id == entry.appliance_id, Appliance.user_id == current_user.id).first()
+    if not appliance:
+         raise HTTPException(status_code=404, detail="Appliance not found")
+
+    exe_time = entry.executed_time or get_colorado_time()
     
-    # Simple Conflict Detection: Check if another high-power task was logged within the last hour
-    warnings = []
-    if entry.power_kw > 2.0:
-        recent_logs = [l for l in mock_db_logs if l['user_id'] == entry.user_id and l != log_data]
-        if recent_logs:
-            warnings.append("Warning: Logging multiple high-power tasks concurrently can spike Demand Charges.")
+    # Calculate actual cost run right now
+    grid_status = evaluate_grid_status(current_user.provider, current_time=exe_time)
+    cost = appliance.kw_rating * grid_status["rate"]
 
-    return {"status": "success", "data": log_data, "warnings": warnings}
+    new_log = Log(
+        user_id=current_user.id,
+        appliance_id=appliance.id,
+        executed_time=exe_time,
+        cost=cost
+    )
+    db.add(new_log)
+    db.commit()
+    db.refresh(new_log)
 
-@router.get("/logs")
-def get_logs(user_id: str):
-    user_logs = [log for log in mock_db_logs if log["user_id"] == user_id]
-    return {"status": "success", "data": user_logs}
+    return new_log
+
+@router.get("/logs", response_model=List[LogResponse])
+def get_logs(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return db.query(Log).filter(Log.user_id == current_user.id).order_by(Log.executed_time.desc()).all()
 
 @router.get("/status")
-def get_status(provider: str = "Xcel"):
-    if provider.lower() not in ["xcel", "core", "united power"]:
-        raise HTTPException(status_code=400, detail="Unsupported provider. Choose 'Xcel', 'CORE', or 'United Power'.")
-    
-    status_data = evaluate_grid_status(provider)
-    return status_data
-
-from app.core.ai_service import generate_savings_forecast
-# load env vars
-from dotenv import load_dotenv
-load_dotenv()
+def get_status(current_user: User = Depends(get_current_user)):
+    """Gets the live status based on the *authenticated user's* chosen provider."""
+    return evaluate_grid_status(current_user.provider)
 
 @router.get("/forecast")
-def get_forecast(user_id: str, provider: str = "Xcel"):
-    user_logs = [log for log in mock_db_logs if log["user_id"] == user_id]
+def get_forecast(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Generates AI savings forecast considering both past logs and future schedules"""
     
-    forecast_text = generate_savings_forecast(user_logs, provider)
+    # Grab recent logs and active schedules
+    logs = db.query(Log).filter(Log.user_id == current_user.id).order_by(Log.executed_time.desc()).limit(10).all()
+    schedules = db.query(Schedule).filter(Schedule.user_id == current_user.id, Schedule.status == "pending").all()
+    
+    # Format for Gemini
+    context_data = []
+    for l in logs:
+        appliance = db.query(Appliance).filter(Appliance.id == l.appliance_id).first()
+        context_data.append({"type": "Past Action", "appliance": appliance.name if appliance else "Unknown", "time": str(l.executed_time), "cost": l.cost})
+        
+    for s in schedules:
+        appliance = db.query(Appliance).filter(Appliance.id == s.appliance_id).first()
+        context_data.append({"type": "Planned Action", "appliance": appliance.name if appliance else "Unknown", "scheduled_time": str(s.scheduled_time), "projected_cost": s.projected_cost})
+    
+    if not context_data:
+         return {"status": "success", "forecast": "No logs yet. Start registering appliances and scheduling usage to get AI insights!"}
+         
+    forecast_text = generate_savings_forecast(context_data, current_user.provider)
          
     return {"status": "success", "forecast": forecast_text}

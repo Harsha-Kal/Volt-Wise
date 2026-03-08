@@ -1,42 +1,49 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle, Clock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { fetchWithAuth } from "@/lib/auth";
+import { AlertTriangle, CheckCircle } from "lucide-react"; 
 import { cn } from "@/lib/utils";
 
-interface GridStatus {
+type GridStatus = {
   status: "Green" | "Yellow" | "Red";
   rate: number;
   provider: string;
   timestamp: string;
-}
+};
 
-export function GridHUD() {
-  const [gridData, setGridData] = useState<GridStatus | null>(null);
-  const [provider, setProvider] = useState<string>("Xcel");
-  const [loading, setLoading] = useState<boolean>(true);
+export default function GridHUD() { 
+  const [data, setData] = useState<GridStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchStatus = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      // Removed manual provider selection - the backend now automatically 
+      // returns status based on the authenticated user's profile settings.
+      const response = await fetchWithAuth(`http://localhost:8000/api/status`);
+      if (!response.ok) throw new Error("Failed to fetch grid status");
+      
+      const result = await response.json();
+      setData(result);
+    } catch (err: any) {
+      setError("Unable to connect to grid API.");
+      console.error("Failed to fetch grid status:", err); // Keep console error for debugging
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchStatus = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`http://localhost:8000/api/status?provider=${provider}`);
-        const data = await res.json();
-        setGridData(data);
-      } catch (error) {
-        console.error("Failed to fetch grid status:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchStatus();
-    
-    // Poll every minute
-    const interval = setInterval(fetchStatus, 60000);
+    // Refresh every 5 minutes
+    const interval = setInterval(fetchStatus, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [provider]);
+  }, []); // Removed provider from dependency array
 
-  if (loading && !gridData) {
+  if (!data) { // Changed gridData to data
     return (
       <div className="animate-pulse bg-neutral-900 rounded-2xl p-6 h-40 border border-neutral-800">
         <div className="h-6 bg-neutral-800 rounded w-1/3 mb-4"></div>
@@ -45,9 +52,9 @@ export function GridHUD() {
     );
   }
 
-  const isGreen = gridData?.status === "Green";
-  const isYellow = gridData?.status === "Yellow";
-  const isRed = gridData?.status === "Red";
+  const isGreen = data?.status === "Green";
+  const isYellow = data?.status === "Yellow";
+  const isRed = data?.status === "Red";
 
   return (
     <div className="bg-neutral-900/50 backdrop-blur-xl border border-white/5 shadow-2xl rounded-3xl p-6 relative overflow-hidden group">
@@ -59,24 +66,24 @@ export function GridHUD() {
         isRed && "bg-rose-500"
       )} />
 
-      <div className="flex justify-between items-start mb-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-neutral-400 font-medium tracking-wide text-sm uppercase mb-1 flex items-center gap-2">
-            <Clock className="w-4 h-4" /> Live Grid Status
-          </h2>
-          <div className="flex items-center gap-2">
-            <select 
-              value={provider} 
-              onChange={(e) => setProvider(e.target.value)}
-              className="bg-transparent text-xl font-bold text-white border-b border-dashed border-white/20 pb-1 focus:outline-none focus:border-white transition-colors cursor-pointer appearance-none"
-            >
-              <option value="Xcel">Xcel Energy (CO)</option>
-              <option value="CORE">CORE Electric</option>
-              <option value="United Power">United Power</option>
-            </select>
+          <p className="text-sm font-medium opacity-80 mb-1">Current Rate</p>
+          <div className="flex items-baseline gap-2">
+            <span className="text-4xl lg:text-5xl font-bold tracking-tight">${data.rate.toFixed(2)}</span>
+            <span className="text-sm opacity-80">/ kWh</span>
           </div>
         </div>
+
+        <div className="text-right">
+          <p className="text-sm font-medium opacity-80 mb-1">Provider</p>
+          <div className="text-xl font-medium tracking-tight">
+            {data.provider}
+          </div>
+        </div>
+      </div>
         
+      <div className="mt-6 flex items-center justify-between">
         <div className={cn(
           "px-4 py-2 rounded-full font-bold text-sm tracking-widest uppercase flex items-center gap-2 shadow-lg",
           isGreen && "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
@@ -85,15 +92,8 @@ export function GridHUD() {
         )}>
           {isGreen && <CheckCircle className="w-4 h-4" />}
           {isRed && <AlertTriangle className="w-4 h-4" />}
-          {gridData?.status}
+          {data?.status}
         </div>
-      </div>
-
-      <div className="flex items-baseline gap-2">
-        <span className="text-5xl font-black text-white tracking-tighter">
-          ${gridData?.rate.toFixed(2)}
-        </span>
-        <span className="text-neutral-400 font-medium">/ kWh</span>
       </div>
       
       <p className="text-sm text-neutral-500 mt-4 leading-relaxed max-w-sm">

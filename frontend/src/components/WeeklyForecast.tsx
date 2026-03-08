@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Sparkles, RefreshCw } from "lucide-react";
+import { fetchWithAuth } from "@/lib/auth";
 
-export function WeeklyForecast({ refreshTrigger }: { refreshTrigger: number }) {
+export default function WeeklyForecast() {
   const [forecast, setForecast] = useState<string>("Loading your personalized insights...");
   const [loading, setLoading] = useState(true);
 
@@ -11,7 +12,7 @@ export function WeeklyForecast({ refreshTrigger }: { refreshTrigger: number }) {
     const fetchForecast = async () => {
       setLoading(true);
       try {
-        const res = await fetch("http://localhost:8000/api/forecast?user_id=demo-user-123&provider=Xcel");
+        const res = await fetchWithAuth("http://localhost:8000/api/forecast");
         const data = await res.json();
         setForecast(data.forecast);
       } catch (err) {
@@ -23,7 +24,7 @@ export function WeeklyForecast({ refreshTrigger }: { refreshTrigger: number }) {
     };
     
     fetchForecast();
-  }, [refreshTrigger]);
+  }, []);
 
   return (
     <div className="bg-gradient-to-br from-indigo-900/40 to-purple-900/20 backdrop-blur-xl border border-indigo-500/20 rounded-3xl p-6 relative overflow-hidden">
