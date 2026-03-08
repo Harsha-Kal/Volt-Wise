@@ -1,45 +1,44 @@
 import os
-import json
-from google import genai
-from pydantic import BaseModel
+from datetime import datetime
+from app.core.colorado_engine import evaluate_grid_status
 
 def generate_savings_forecast(logs: list, provider: str = "Xcel") -> str:
     """
-    Calls the Gemini API to analyze the user's recent energy habits and provide a forecast.
+    Analyzes the user's recent energy habits and provides a forecast.
+    Uses deterministic logic to provide actionable insights about scheduling
+    and habits without relying on an external API.
     """
-    api_key = os.environ.get("GEMINI_API_KEY")
-    
-    if not api_key or api_key == "your_gemini_api_key_here":
-        return "Configure your GEMINI_API_KEY in the .env file to unlock AI-powered insights."
-        
     if not logs:
         return "No recent activity to analyze. Start logging your appliances to get personalized savings tips!"
         
-    try:
-        client = genai.Client(api_key=api_key)
-        
-        # Prepare context
-        logs_json = json.dumps(logs, indent=2)
-        system_prompt = f"""
-You are an expert energy advisor for a Colorado resident using {provider}. 
-Your goal is to act like a "fitness tracker" for the grid.
-The user provides you with their recent appliance logs.
-Analyze their behavior based on Typical Time-of-Use rates:
-- Xcel Peak: 5 PM - 9 PM Weekdays
-- CORE Peak: 4 PM - 8 PM
-- United Power Peak: 4 PM - 8 PM (or 5-9 PM depending on plan)
+    tips = []
+    
+    # 1. Check for planned actions during peak hours
+    planned_peak = [l for l in logs if l.get("type") == "Planned Action" and l.get("projected_cost", 0) > 0.5]
+    if planned_peak:
+        worst_schedule = max(planned_peak, key=lambda x: x.get("projected_cost", 0))
+        appliance_name = worst_schedule.get("appliance", "device")
+        cost = worst_schedule.get("projected_cost", 0)
+        # Estimate savings (assuming off-peak is roughly 70% cheaper + no demand charge)
+        savings = cost * 0.7 
+        tips.append(f"You're scheduling your {appliance_name} during peak hours! Waiting until off-peak would save you roughly ${savings:.2f}.")
 
-Provide a short, punchy, friendly piece of advice (2-3 sentences max) on how they can shift their usage to save money, acknowledging any good behavior you see. Do not use markdown if possible, just plain text.
-"""
-        user_prompt = f"Here are my recent logs:\n{logs_json}\n\nWhat is my forecast and advice?"
+    # 2. Check past habits to suggest switching devices
+    past_actions = [l for l in logs if l.get("type") == "Past Action"]
+    if len(past_actions) >= 2:
+        # Get the top two most expensive appliances used recently
+        costs_by_appliance = {}
+        for action in past_actions:
+            name = action.get("appliance", "Unknown")
+            costs_by_appliance[name] = costs_by_appliance.get(name, 0) + action.get("cost", 0)
+            
+        sorted_appliances = sorted(costs_by_appliance.items(), key=lambda x: x[1], reverse=True)
+        if len(sorted_appliances) >= 2:
+            top1 = sorted_appliances[0][0]
+            top2 = sorted_appliances[1][0]
+            tips.append(f"Based on your current habits, it would be ideal to switch the usage time of your {top1} and {top2} to off-peak hours to save money and reduce overlapping demand.")
+            
+    if not tips:
+        tips.append("You're doing great! Keep scheduling your heavy appliances during off-peak hours (typically after 8 PM) to maximize your savings.")
 
-        response = client.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=[system_prompt, user_prompt],
-        )
-        
-        return response.text.strip()
-        
-    except Exception as e:
-        print(f"Error calling Gemini: {e}")
-        return "Our AI advisor is currently taking a break. Please check back later."
+    return " ".join(tips)
