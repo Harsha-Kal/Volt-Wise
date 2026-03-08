@@ -28,6 +28,7 @@ export default function DevicesPage() {
   const [appliances, setAppliances] = useState<Appliance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [connectingId, setConnectingId] = useState<number | null>(null);
 
   // Form State
   const [newName, setNewName] = useState("");
@@ -77,6 +78,10 @@ export default function DevicesPage() {
   };
 
   const handleConnectSmart = async (id: number) => {
+    setConnectingId(id);
+    // Fake a 2-second network search/pairing delay
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     try {
       const res = await fetchWithAuth(`http://localhost:8000/api/devices/${id}/connect`, {
         method: "POST"
@@ -86,6 +91,9 @@ export default function DevicesPage() {
       }
     } catch (e) {
       console.error(e);
+      setError("Failed to connect device");
+    } finally {
+      setConnectingId(null);
     }
   };
 
@@ -183,9 +191,26 @@ export default function DevicesPage() {
                   {!app.is_smart_device && (
                     <button 
                       onClick={() => handleConnectSmart(app.id)}
-                      className="px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-lg text-sm transition-colors"
+                      disabled={connectingId !== null}
+                      className={`px-4 py-2 border rounded-lg text-sm transition-colors flex items-center gap-2
+                        ${connectingId === app.id 
+                          ? "bg-indigo-500/5 border-indigo-500/30 text-indigo-300 cursor-wait"
+                          : "bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border-indigo-500/30"
+                        }
+                        ${connectingId !== null && connectingId !== app.id ? "opacity-50 cursor-not-allowed" : ""}
+                      `}
                     >
-                      Connect to Smart Home
+                      {connectingId === app.id ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Searching for device...
+                        </>
+                      ) : (
+                        "Connect to Smart Home"
+                      )}
                     </button>
                   )}
                 </div>

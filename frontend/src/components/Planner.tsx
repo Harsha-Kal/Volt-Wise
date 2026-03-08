@@ -16,6 +16,7 @@ type ScheduleResult = {
   energy_cost: number | null;
   demand_cost: number | null;
   duration_hours: number | null;
+  rate_per_kwh: number | null;
   status: string;
   message: string | null;
 };
@@ -49,7 +50,7 @@ export default function Planner() {
   const [appliances, setAppliances] = useState<Appliance[]>([]);
   const [selectedApplianceId, setSelectedApplianceId] = useState<number | "">("");
   const [selectedTime, setSelectedTime] = useState("");
-  const [durationHours, setDurationHours] = useState(1.0);
+  const [durationInput, setDurationInput] = useState("1.0");
   const [loading, setLoading] = useState(true);
   const [scheduling, setScheduling] = useState(false);
   const [result, setResult] = useState<ScheduleResult | null>(null);
@@ -93,7 +94,7 @@ export default function Planner() {
         body: JSON.stringify({
           appliance_id: selectedApplianceId,
           scheduled_time: isoTime,
-          duration_hours: durationHours,
+          duration_hours: parseFloat(durationInput) || 1.0,
           timezone: deviceTz,
         }),
       });
@@ -118,11 +119,9 @@ export default function Planner() {
   const energyCost = result?.energy_cost ?? 0;
   const demandCost = result?.demand_cost ?? 0;
   const totalCost = result?.projected_cost ?? 0;
-  const duration = result?.duration_hours ?? durationHours;
-
-  // Safely compute rate per kWh
-  const denominator = (selectedApp?.kw_rating ?? 1) * duration;
-  const ratePerKwh = denominator > 0 ? energyCost / denominator : 0;
+  const parsedDuration = parseFloat(durationInput) || 1.0;
+  const duration = result?.duration_hours ?? parsedDuration;
+  const ratePerKwh = result?.rate_per_kwh ?? 0;
 
   const isPeak = result?.message?.toLowerCase().includes("peak");
   const isShifted = result?.status === "shifted";
@@ -186,13 +185,13 @@ export default function Planner() {
             <label className="block text-xs text-neutral-400 mb-2">
               Run Duration —{" "}
               <span className="text-white font-mono">
-                {durationHours >= 1
-                  ? `${durationHours} hr${durationHours !== 1 ? "s" : ""}`
-                  : `${durationHours * 60} min`}
+                {parsedDuration >= 1
+                  ? `${parsedDuration} hr${parsedDuration !== 1 ? "s" : ""}`
+                  : `${parsedDuration * 60} min`}
               </span>
               {selectedApp && (
                 <span className="ml-2 text-neutral-600">
-                  = {(selectedApp.kw_rating * durationHours).toFixed(2)} kWh
+                  = {(selectedApp.kw_rating * parsedDuration).toFixed(2)} kWh
                 </span>
               )}
             </label>
@@ -201,9 +200,9 @@ export default function Planner() {
                 <button
                   key={p.label}
                   type="button"
-                  onClick={() => setDurationHours(p.hours)}
+                  onClick={() => setDurationInput(p.hours.toString())}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                    durationHours === p.hours
+                    parsedDuration === p.hours
                       ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
                       : "bg-white/5 border-white/10 text-neutral-400 hover:bg-white/10"
                   }`}
@@ -214,10 +213,10 @@ export default function Planner() {
               <input
                 type="number"
                 min="0.1"
-                max="12"
-                step="0.5"
-                value={durationHours}
-                onChange={e => setDurationHours(Math.max(0.1, parseFloat(e.target.value) || 1))}
+                max="24"
+                step="0.1"
+                value={durationInput}
+                onChange={e => setDurationInput(e.target.value)}
                 className="w-20 bg-black border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50"
               />
             </div>

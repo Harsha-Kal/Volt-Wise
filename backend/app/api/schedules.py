@@ -26,6 +26,7 @@ class ScheduleResponse(BaseModel):
     energy_cost: Optional[float] = None
     demand_cost: Optional[float] = None
     duration_hours: Optional[float] = None
+    rate_per_kwh: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -116,4 +117,5 @@ def create_schedule(schedule_in: ScheduleCreate, current_user: User = Depends(ge
     response_data.energy_cost = round(final_energy_cost, 4)
     response_data.demand_cost = round(final_demand_cost, 4)
     response_data.duration_hours = duration
+    response_data.rate_per_kwh = optimal_grid["rate"] if status_msg == "shifted" else requested_status["rate"]
     return response_data
