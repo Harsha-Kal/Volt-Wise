@@ -13,14 +13,14 @@ type Appliance = {
 };
 
 const APPLIANCE_VAULT = [
-  { name: "1990s Electric Dryer", kw_rating: 4.0 },
-  { name: "Standard Dishwasher", kw_rating: 1.5 },
-  { name: "Electric Water Heater", kw_rating: 4.5 },
-  { name: "EV Charger (L2)", kw_rating: 7.2 },
-  { name: "Central AC", kw_rating: 3.5 },
-  { name: "Electric Oven/Range", kw_rating: 4.0 },
-  { name: "Washing Machine", kw_rating: 0.5 },
-  { name: "Pool Pump", kw_rating: 1.5 },
+  { name: "Electric Dryer", kw_rating: 4.5 }, // Typically 3.0 to 5.0 kW
+  { name: "Dishwasher", kw_rating: 1.8 }, // Typically 1.2 to 2.4 kW
+  { name: "Electric Water Heater", kw_rating: 4.5 }, // Typically 4.0 to 5.5 kW
+  { name: "EV Charger (Level 2)", kw_rating: 7.6 }, // Typically 7.2 to 11.5 kW
+  { name: "Central Air Conditioner", kw_rating: 3.8 }, // Typically 3.0 to 5.0 kW
+  { name: "Electric Oven", kw_rating: 3.0 }, // Typically 2.0 to 5.0 kW
+  { name: "Washing Machine", kw_rating: 0.9 }, // Typically 0.5 to 1.5 kW
+  { name: "Space Heater", kw_rating: 1.5 }, // Typically 1.5 kW exactly
 ];
 
 export default function DevicesPage() {
@@ -78,23 +78,10 @@ export default function DevicesPage() {
   };
 
   const handleConnectSmart = async (id: number) => {
+    // The user requested that this button just says "Searching for device..." forever
+    // instead of successfully connecting, to simulate the UX of waiting/searching.
     setConnectingId(id);
-    // Fake a 2-second network search/pairing delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    try {
-      const res = await fetchWithAuth(`http://localhost:8000/api/devices/${id}/connect`, {
-        method: "POST"
-      });
-      if (res.ok) {
-        loadDevices();
-      }
-    } catch (e) {
-      console.error(e);
-      setError("Failed to connect device");
-    } finally {
-      setConnectingId(null);
-    }
+    // Don't call the backend, just leave it in the connecting visual state
   };
 
   return (
