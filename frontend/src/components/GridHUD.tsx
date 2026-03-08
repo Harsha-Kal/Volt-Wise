@@ -10,27 +10,28 @@ type GridStatus = {
   rate: number;
   provider: string;
   timestamp: string;
+  demand_charge_per_kw?: number;
+  demand_threshold_kw?: number;
 };
 
 export default function GridHUD() { 
   const [data, setData] = useState<GridStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tempC, setTempC] = useState<number | null>(null);
 
   const fetchStatus = async () => {
     try {
       setLoading(true);
       setError(null);
-      // Removed manual provider selection - the backend now automatically 
-      // returns status based on the authenticated user's profile settings.
-      const response = await fetchWithAuth(`http://localhost:8000/api/status`);
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const response = await fetchWithAuth(`http://localhost:8000/api/status?tz=${encodeURIComponent(tz)}`);
       if (!response.ok) throw new Error("Failed to fetch grid status");
-      
       const result = await response.json();
       setData(result);
     } catch (err: any) {
       setError("Unable to connect to grid API.");
-      console.error("Failed to fetch grid status:", err); // Keep console error for debugging
+      console.error("Failed to fetch grid status:", err);
     } finally {
       setLoading(false);
     }
@@ -38,10 +39,14 @@ export default function GridHUD() {
 
   useEffect(() => {
     fetchStatus();
-    // Refresh every 5 minutes
     const interval = setInterval(fetchStatus, 5 * 60 * 1000);
+    // Fetch local weather (Denver, CO) from Open-Meteo (free, no API key)
+    fetch("https://api.open-meteo.com/v1/forecast?latitude=39.74&longitude=-104.98&current=temperature_2m")
+      .then(r => r.json())
+      .then(d => setTempC(d?.current?.temperature_2m ?? null))
+      .catch(() => {});
     return () => clearInterval(interval);
-  }, []); // Removed provider from dependency array
+  }, []);
 
   if (!data) { // Changed gridData to data
     return (
@@ -101,6 +106,16 @@ export default function GridHUD() {
          isRed ? "Peak pricing in effect. Delay high-energy usage if possible to avoid demand charges." :
          "Shoulder pricing. Moderate usage recommended."}
       </p>
+
+      {/* Extreme heat warning */}
+      {tempC !== null && tempC > 32 && (
+        <div className="mt-4 flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+          <span className="text-lg">🌡️</span>
+          <p className="text-xs text-amber-400/90 leading-relaxed">
+            <strong>Extreme Heat Warning:</strong> It&apos;s {tempC.toFixed(0)}°C in Denver. Xcel&apos;s Critical Peak pricing may trigger today. Avoid heavy appliances between 2–6 PM.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

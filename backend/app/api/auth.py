@@ -77,3 +77,13 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 @router.get("/me")
 def read_users_me(current_user: User = Depends(get_current_user)):
     return {"email": current_user.email, "provider": current_user.provider, "id": current_user.id}
+
+class UserUpdate(BaseModel):
+    provider: str
+
+@router.patch("/me")
+def update_user(update: UserUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    current_user.provider = update.provider
+    db.commit()
+    db.refresh(current_user)
+    return {"email": current_user.email, "provider": current_user.provider, "id": current_user.id}

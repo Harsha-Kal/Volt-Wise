@@ -12,6 +12,17 @@ type Appliance = {
   is_smart_device: boolean;
 };
 
+const APPLIANCE_VAULT = [
+  { name: "1990s Electric Dryer", kw_rating: 4.0 },
+  { name: "Standard Dishwasher", kw_rating: 1.5 },
+  { name: "Electric Water Heater", kw_rating: 4.5 },
+  { name: "EV Charger (L2)", kw_rating: 7.2 },
+  { name: "Central AC", kw_rating: 3.5 },
+  { name: "Electric Oven/Range", kw_rating: 4.0 },
+  { name: "Washing Machine", kw_rating: 0.5 },
+  { name: "Pool Pump", kw_rating: 1.5 },
+];
+
 export default function DevicesPage() {
   const router = useRouter();
   const [appliances, setAppliances] = useState<Appliance[]>([]);
@@ -39,26 +50,30 @@ export default function DevicesPage() {
     }
   };
 
-  const handleAddDevice = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddDevice = async (e: React.FormEvent, name?: string, kw?: number) => {
+    if (e) e.preventDefault();
     setError("");
+    const deviceName = name ?? newName;
+    const deviceKw = kw ?? parseFloat(newKw);
+    if (!deviceName || isNaN(deviceKw)) return;
     try {
       const res = await fetchWithAuth("http://localhost:8000/api/devices/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newName,
-          kw_rating: parseFloat(newKw)
-        }),
+        body: JSON.stringify({ name: deviceName, kw_rating: deviceKw }),
       });
       if (!res.ok) throw new Error("Failed to add appliance");
-      
       setNewName("");
       setNewKw("");
       loadDevices();
     } catch (err: any) {
       setError(err.message);
     }
+  };
+
+  const handleVaultAdd = (vault: { name: string; kw_rating: number }) => {
+    const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+    handleAddDevice(fakeEvent, vault.name, vault.kw_rating);
   };
 
   const handleConnectSmart = async (id: number) => {
@@ -93,7 +108,7 @@ export default function DevicesPage() {
           
           {/* Add Device Form */}
           <div className="col-span-1 bg-neutral-900/50 border border-white/5 rounded-2xl p-6 h-fit">
-            <h2 className="text-xl font-medium mb-4">Add Appliance</h2>
+            <h2 className="text-xl font-medium mb-4">Add Custom Appliance</h2>
             <form onSubmit={handleAddDevice} className="space-y-4">
               <div>
                 <label className="block text-xs text-neutral-400 mb-1">Appliance Name</label>
@@ -122,6 +137,23 @@ export default function DevicesPage() {
                 Register Device
               </button>
             </form>
+
+            {/* Appliance Vault */}
+            <div className="mt-6 pt-5 border-t border-white/10">
+              <h3 className="text-sm font-medium text-neutral-400 mb-3">⚡ Quick Add from Vault</h3>
+              <div className="space-y-2">
+                {APPLIANCE_VAULT.map(v => (
+                  <button
+                    key={v.name}
+                    onClick={() => handleVaultAdd(v)}
+                    className="w-full flex items-center justify-between px-3 py-2 bg-white/5 hover:bg-emerald-500/10 hover:border-emerald-500/30 border border-white/5 rounded-lg text-sm transition-all text-left"
+                  >
+                    <span className="text-neutral-300">{v.name}</span>
+                    <span className="text-xs font-mono text-neutral-500">{v.kw_rating} kW</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Device List */}

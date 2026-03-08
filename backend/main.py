@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.db.database import Base, engine
 from app.db import models
@@ -15,12 +16,21 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Volt-Wise API v2")
 
+import traceback
+import logging
+logger = logging.getLogger("uvicorn.error")
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception:\n" + traceback.format_exc())
+    return JSONResponse(status_code=500, content={"detail": str(exc)})
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://10.0.0.90:3000"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
 )
 
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])

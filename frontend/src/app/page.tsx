@@ -8,12 +8,13 @@ import Link from "next/link";
 import GridHUD from "@/components/GridHUD";
 import Planner from "@/components/Planner";
 import WeeklyForecast from "@/components/WeeklyForecast";
+import DemandRing from "@/components/DemandRing";
+import BillComparison from "@/components/BillComparison";
 
 export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    // Basic Client Route Protection
     if (!getToken()) {
       router.push("/login");
     }
@@ -49,14 +50,25 @@ export default function Home() {
 
         {/* Main Dashboard Layout */}
         <div className="space-y-6">
+
           <section>
             <h2 className="text-sm font-medium text-neutral-500 uppercase tracking-wider mb-3 px-1">Live Grid Status</h2>
             <GridHUD />
           </section>
 
           <section>
+            <h2 className="text-sm font-medium text-neutral-500 uppercase tracking-wider mb-3 px-1">Monthly Demand Budget</h2>
+            <DemandRing />
+          </section>
+
+          <section>
             <h2 className="text-sm font-medium text-neutral-500 uppercase tracking-wider mb-3 px-1">Smart Planner</h2>
             <Planner />
+          </section>
+
+          <section>
+            <h2 className="text-sm font-medium text-neutral-500 uppercase tracking-wider mb-3 px-1">Bill Comparison</h2>
+            <BillComparison />
           </section>
 
           <section className="pt-4">
